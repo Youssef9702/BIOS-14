@@ -1,0 +1,67 @@
+# package loading
+library(MuMIn)
+library(glmmTMB)
+
+# data set selection
+dat <- read.table("BIOS 14 Processing/data/exam2022_part2-1.txt", header = T)
+
+# predictor variable assignment
+mass <- dat$mass - (mean(dat$mass)) #mean-centering for biological relevance
+age <- dat$age - mean(dat$age) #mean-centering for biological relevance
+coh <- dat$cohort
+den <- as.factor(dat$density)
+
+# response variable assignment
+horns <- dat$hornL+dat$hornR #total horn length
+
+# fixed effect model fitting
+m0 <- lm(horns ~ age*mass)# chosen
+m1 <- lm(horns ~ age+mass)
+m2 <- lm(horns ~ age)
+m3 <- lm(horns ~ mass)
+m4 <- lm(horns ~ 1 )
+
+# fixed effect model choice
+mlist <-  list(m0,m1, m2, m3, m4)
+AICTab <-  AIC(m0,m1, m2, m3, m4)
+AICTab$logLik <-  unlist(lapply(mlist, logLik)) #log likelyhood
+AICTab <-  AICTab[order(AICTab$AIC, decreasing=F),] #sort by decreasing AIC
+AICTab$delta <-  round(AICTab$AIC- min(AICTab$AIC), 2) #Delta AIC
+lh <-  exp(-0.5*AICTab$delta) 
+AICTab$w <-  round(lh/sum(lh), 2)
+AICTab #check AIC
+
+# random variable selection
+rm0 <- lm(horns ~ coh+den)#chosen
+rm1 <- lm(horns ~ coh)
+rm2 <- lm(horns ~ den)
+
+#evaluate the variance contributed by the predictors
+anova(rm0) #chosen
+anova(rm1)
+anova(rm2)
+
+#mixed model selection
+M <- glmmTMB(horns ~ age*mass + (1|coh)+(1|den), data = dat)
+
+# summary of model
+summary(M)
+r.squaredGLMM(M) #pseudo R^2
+
+#check for multicolinearity
+r2 = r.squaredGLMM(M)[1,1]
+1/(1-r2) #Variance inflation factor
+
+# plotting
+# Load necessary library
+library(ggplot2)
+
+ggplot(dat, aes(x = mass, y = horns, color = age)) +
+  geom_point(aes(size = 1)) +
+  scale_color_gradient(low = "lightblue", high = "darkblue") +
+  geom_smooth(method = "glm",formula = y~log(x), color = "red", se = TRUE) +
+  labs(title = "Change in Horn Length by Age and Mass",
+       x = "Mass (Kg)",
+       y = "Total Horn Length (mm)",
+       color = "Age (years)") +
+  theme_minimal()
